@@ -1,0 +1,4 @@
+interface:
+  display_name: "Doubao Mobile Automation"
+  short_description: "Run Doubao mobile collection through ADB"
+  default_prompt: "Use $doubao-mobile-automation to run mobile Doubao questions through ADB and report answers with source URLs."
