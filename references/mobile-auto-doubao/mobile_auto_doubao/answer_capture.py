@@ -36,6 +36,14 @@ def has_generation_indicator(nodes: list[dict]) -> bool:
     return any(keyword in combined for keyword in GENERATING_KEYWORDS)
 
 
+def input_contains_question(nodes: list[dict], question: str) -> bool:
+    """Return true while the current question is still sitting in the input box."""
+    q = question.strip()
+    if not q:
+        return False
+    return any(q in node.get("text", "") for node in find_nodes(nodes, resource_id=INPUT_ID))
+
+
 def wait_for_answer(adb: AdbClient, question: str, options: dict, output_dir: str) -> dict:
     """Poll the screen until the answer text stops changing."""
     timeout_ms = int(options.get("timeoutMs", 180000))
@@ -47,14 +55,21 @@ def wait_for_answer(adb: AdbClient, question: str, options: dict, output_dir: st
     latest_state = None
     while (time.time() - started) * 1000 < timeout_ms:
         latest_state = save_state(adb, output_dir, "answer-sample")
-        answer = extract_answer_text(latest_state["nodes"], question)
+        pending_input = input_contains_question(latest_state["nodes"], question)
+        answer = "" if pending_input else extract_answer_text(latest_state["nodes"], question)
         generating = has_generation_indicator(latest_state["nodes"])
         if answer and answer == last_answer and not generating:
             stable += 1
         else:
             stable = 0
             last_answer = answer
-        samples.append({"elapsedMs": int((time.time() - started) * 1000), "answerLength": len(answer), "stable": stable, "generating": generating})
+        samples.append({
+            "elapsedMs": int((time.time() - started) * 1000),
+            "answerLength": len(answer),
+            "stable": stable,
+            "generating": generating,
+            "pendingInput": pending_input,
+        })
         if answer and stable >= required_stable:
             break
         time.sleep(0.5)

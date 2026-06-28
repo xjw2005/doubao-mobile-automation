@@ -6,7 +6,7 @@ description: Current Doubao mobile automation workflow for running task JSON or 
 # Doubao Mobile Automation
 
 Use this skill to run, debug, or migrate the current `mobile-auto-doubao` runner on another machine.
-It covers task JSON runs, Feishu Base collection/writeback, ADB device selection, ADB Keyboard input, and source-link extraction.
+It covers task JSON runs, Feishu Base collection/writeback, JSON-configured table IDs, ADB device selection, ADB Keyboard input, answer share-page extraction, and source-link extraction.
 
 ## Core Workflow
 
@@ -43,6 +43,35 @@ python runner.py --base-url "<feishu-base-url>" --base-start 1 --base-end 10 --d
 python runner.py --base-url "<feishu-base-url>" --base-start 1 --base-end 10 --writeback --mark-collected --collect-account 18870501682
 ```
 
+Feishu Base mode with a JSON table-ID config, recommended when the input question table and the two writeback tables vary but field names stay the same:
+
+```powershell
+python runner.py --feishu-config configs/feishu-doubao-example.json --base-start 1 --base-end 10 --dry-run
+python runner.py --feishu-config configs/feishu-doubao-example.json --base-start 1 --base-end 10 --writeback --mark-collected --extract-sources --link-only --cdp-url http://127.0.0.1:9222
+```
+
+Minimal config shape:
+
+```json
+{
+  "input": {
+    "baseUrl": "https://example.feishu.cn/base/<baseToken>?table=<questionTableId>&view=<viewId>"
+  },
+  "writeback": {
+    "answerTableId": "<answerTableId>",
+    "sourceTableId": "<sourceTableId>"
+  },
+  "collectAccount": "18870501682"
+}
+```
+
+The input table still uses the existing fields `问题`, `关联自然问句`, `是否开启深度思考`, and `是否本次采集`.
+The answer and source writeback tables still use the existing field names; only the table IDs are swapped through the JSON file.
+
+For Doubao share-page extraction, use `--extract-sources --link-only`.
+In this mode the runner captures the mobile answer share link, parses the Doubao share page through `doubao-source-extractor/`, fills answer/thinking/sources from the share-page snapshot, and lets the JS extractor write source rows.
+If the share link or share-page answer cannot be verified, the runner skips Feishu answer writeback and does not mark the source row collected.
+
 `--collect-account` controls the `采集账号` field written into the Feishu answer table.
 Set it per operator/device when you run multiple devices in parallel.
 
@@ -52,7 +81,7 @@ If you need to keep screenshots, `currentFocus`, or XML artifacts, add `--debug`
 
 - `references/README.md`: migration, environment setup, ADB checks, ADB Keyboard setup, task JSON contract, Feishu Base mode, output contract, troubleshooting.
 - `references/scripts/README.md`: probe and debug script index.
-- `references/mobile-auto-doubao/`: runnable project snapshot containing `runner.py`, `mobile_auto_doubao/`, `requirements.txt`, and `tests_smoke.py`.
+- `references/mobile-auto-doubao/`: runnable Doubao project snapshot containing `runner.py` (entry point), `mobile_auto_doubao/` (the package), `doubao-source-extractor/` (the share-page JS extractor), `configs/feishu-doubao-example.json`, and `requirements.txt`.
 - `references/scripts/`: current probe and debug scripts copied from the project.
 - `references/tasks/`: task JSON examples.
 - `references/tools/keyboardservice-debug.apk`: ADB Keyboard APK used for reliable Chinese text input.
@@ -90,8 +119,7 @@ The runner falls back to `PAGE_UP` / `PAGE_DOWN` key events for scrolling answer
 
 1. Check devices with `adb devices`.
 2. Confirm the device lists `com.android.adbkeyboard/.AdbIME`.
-3. Run `python tests_smoke.py`.
-4. Run a task with `--dry-run`.
-5. If live source extraction fails, use `references/scripts/test_source_links_snake.py` or `references/scripts/probe_source_urls_by_share_copy_adb.py`.
-6. If UI selectors fail, use `references/scripts/probe_ui_layout.py` and compare resource ids in `mobile_auto_doubao/constants.py`.
-7. For parallel runs, give each process a distinct `--serial` and `--output`.
+3. Validate the task with `python runner.py --task tasks/example.json --dry-run`.
+4. If live source extraction fails, use `references/scripts/test_source_links_snake.py` or `references/scripts/probe_source_urls_by_share_copy_adb.py`.
+5. If UI selectors fail, use `references/scripts/probe_ui_layout.py` and compare resource ids in `mobile_auto_doubao/constants.py`.
+6. For parallel runs, give each process a distinct `--serial` and `--output`.

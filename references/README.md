@@ -1,29 +1,32 @@
 # Doubao Mobile Automation Migration README
 
-This reference explains how to move the current Doubao mobile automation runner to another agent or computer and run it with minimal context loss.
+This reference explains how to move the entire Doubao mobile automation integration to another agent or computer and run it with minimal context loss.
+
+The integration has **two cooperating modules**:
+
+1. **跑移动端 (Doubao Mobile Runner)** — a Python package (`mobile_auto_doubao/`) plus a top-level `runner.py`. It drives the Doubao Android app (`com.larus.nova`) via ADB: opens chats, types questions with ADB Keyboard, waits for answers, captures expert/thinking content and the answer share link, and (optionally) writes results back to Feishu.
+2. **豆包来源提取 (Doubao Share-Page Extractor)** — a Node.js script (`doubao-source-extractor/`) that opens a Doubao answer share page through Chrome DevTools Protocol (CDP), separates thinking from the final answer, and extracts real source URLs.
+
+The Python runner is the orchestrator. With `--extract-sources --link-only`, it captures the answer share link on the phone, hands it to the JS extractor, and fills answer / thinking / sources from the share-page snapshot.
 
 ## What This Skill Contains
 
 ```text
 references/
-  mobile-auto-doubao/
-    runner.py
+  README.md                       # this migration guide
+  mobile-auto-doubao/             # runnable Doubao project snapshot (copy this to a workspace)
+    runner.py                     # entry point: python runner.py
     requirements.txt
-    tests_smoke.py
-    mobile_auto_doubao/
-  scripts/
-    probe and debug scripts
-  tasks/
-    example.json
-    real-device-child-yogurt-3q-source-all.json
-  tools/
-    keyboardservice-debug.apk
-  docs/
-    design and sharing drafts
+    mobile_auto_doubao/           # Python package: ADB driver, capture, Feishu writeback
+    doubao-source-extractor/      # share-page extractor: run.js, extract-sources.js, write-feishu.js
+    configs/                      # feishu-doubao-example.json (externalized table IDs)
+  scripts/                        # Doubao probe / debug scripts (operational playbook)
+  tasks/                          # Doubao task JSON examples
+  tools/                          # keyboardservice-debug.apk (ADB Keyboard)
+  docs/                           # ADR 0002 + design / sharing notes
 ```
 
-The runnable project snapshot is under `references/mobile-auto-doubao/`.
-The debug probes stay under `references/scripts/` because they are part of the operational playbook for future agents.
+Everything under `references/` is Doubao-only. The runnable project snapshot is `references/mobile-auto-doubao/`; debug probes stay under `references/scripts/` because they are part of the operational playbook for future agents.
 
 ## Restore On A New Computer
 
@@ -216,10 +219,22 @@ Preview selected rows by row range:
 python runner.py --base-url "<base-url>" --base-start 1 --base-end 10 --dry-run
 ```
 
+Preview selected rows with a JSON config file:
+
+```powershell
+python runner.py --feishu-config configs\feishu-doubao-example.json --base-start 1 --base-end 10 --dry-run
+```
+
 Run and write back:
 
 ```powershell
 python runner.py --base-url "<base-url>" --base-start 1 --base-end 10 --writeback --mark-collected --collect-account 18870501682
+```
+
+Run and write back with the config file and Doubao share-page extraction:
+
+```powershell
+python runner.py --feishu-config configs\feishu-doubao-example.json --base-start 1 --base-end 10 --writeback --mark-collected --extract-sources --link-only --cdp-url http://127.0.0.1:9222
 ```
 
 `--base-start` and `--base-end` are 1-based and inclusive.
@@ -236,6 +251,27 @@ Input fields expected by the project:
 是否本次采集
 ```
 
+When field names stay the same and only table IDs change, prefer the JSON config mode.
+The config file can set the input question table and the two writeback table IDs:
+
+```json
+{
+  "input": {
+    "baseUrl": "https://example.feishu.cn/base/<baseToken>?table=<questionTableId>&view=<viewId>"
+  },
+  "writeback": {
+    "answerTableId": "<answerTableId>",
+    "sourceTableId": "<sourceTableId>"
+  },
+  "collectAccount": "18870501682"
+}
+```
+
+`input.baseUrl` may be replaced by `input.baseToken`, `input.tableId`, and optional `input.viewId`.
+`writeback.answerTableId` points to the `AI回答采集`-style answer table.
+`writeback.sourceTableId` points to the `引用源明细` / AI source table.
+The answer and source field lists are still fixed in code and expected to match the existing schema.
+
 If `lark-cli` is not on `PATH`, pass `--lark-cli <path>`.
 On Windows, use the actual `.cmd` or `.exe` path instead of the PowerShell shim name, because Python `subprocess` may not resolve the shim the same way the shell does.
 
@@ -251,6 +287,26 @@ This is the preferred way to distinguish multiple operators or devices.
 `--force-quick` forces Feishu Base sessions to use quick mode even when the row says deep thinking.
 
 Feishu credentials and `lark-cli` setup are environment-specific and are not bundled in this skill.
+
+## Doubao Share-Page Extraction
+
+The current recommended Doubao mobile collection route is:
+
+```powershell
+python runner.py --feishu-config configs\feishu-doubao-example.json --base-limit 10 --writeback --mark-collected --extract-sources --link-only --cdp-url http://127.0.0.1:9222
+```
+
+`--extract-sources` invokes `doubao-source-extractor/run.js` after the mobile app copies the Doubao answer share link.
+`--link-only` skips mobile expert/source scraping and replaces answer, thinking content, and sources with the share-page snapshot.
+The extractor parses `https://www.doubao.com/thread/...` pages, reads the latest assistant message, separates thinking text from final answer, and writes source rows to the configured source table.
+
+Safety guard:
+
+```text
+No verified share URL or no verified share-page answer => no answer writeback and no mark-collected update.
+```
+
+This prevents stale visible answers from being written when the mobile send/share flow fails.
 
 ## Output Contract
 
@@ -304,7 +360,6 @@ Older probes in `references/scripts/` preserve the debugging history and are use
 ## Quick Validation Checklist
 
 ```powershell
-python tests_smoke.py
 python runner.py --task tasks\example.json --dry-run
 adb devices
 adb -s <serial> shell ime list -s

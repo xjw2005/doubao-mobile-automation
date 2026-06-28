@@ -1,0 +1,10 @@
+{
+  "input": {
+    "baseUrl": "https://example.feishu.cn/base/<baseToken>?table=<questionTableId>&view=<viewId>"
+  },
+  "writeback": {
+    "answerTableId": "<answerTableId>",
+    "sourceTableId": "<sourceTableId>"
+  },
+  "collectAccount": "18870501682"
+}

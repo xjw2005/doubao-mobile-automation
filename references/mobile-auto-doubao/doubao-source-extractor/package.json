@@ -1,0 +1,14 @@
+{
+  "name": "doubao-source-extractor",
+  "version": "1.0.0",
+  "description": "Extract answer, thinking content, and reference sources from Doubao share pages",
+  "main": "run.js",
+  "scripts": {
+    "extract": "node extract-sources.js",
+    "write": "node write-feishu.js",
+    "run": "node run.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.61.0"
+  }
+}

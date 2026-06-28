@@ -486,6 +486,8 @@ def build_feishu_writeback_rows_for_result(source_session: dict, result: dict, c
     """Build Feishu answer and source rows from a collected result."""
     answer_rows = []
     source_rows = []
+    if result.get("writebackAllowed") is False:
+        return {"answerRows": answer_rows, "sourceRows": source_rows}
     if result.get("status") not in {"success", "partial"}:
         return {"answerRows": answer_rows, "sourceRows": source_rows}
     meta = source_session.get("meta") or {}
@@ -525,8 +527,18 @@ def write_feishu_result(writeback_context: dict, source_session: dict, result: d
     base = writeback_context["base"]
     lark_cli = writeback_context.get("larkCli", "lark-cli")
     dry_run = bool(writeback_context.get("dryRun"))
-    answer_result = create_feishu_records(base, FEISHU_ANSWER_TABLE_ID, answer_fields, rows["answerRows"], lark_cli, dry_run)
-    source_result = create_feishu_records(base, FEISHU_SOURCE_TABLE_ID, source_fields, rows["sourceRows"], lark_cli, dry_run)
+    answer_table_id = writeback_context.get("answerTableId") or FEISHU_ANSWER_TABLE_ID
+    source_table_id = writeback_context.get("sourceTableId") or FEISHU_SOURCE_TABLE_ID
+    answer_result = create_feishu_records(base, answer_table_id, answer_fields, rows["answerRows"], lark_cli, dry_run)
+    if writeback_context.get("skipSourceWrite"):
+        source_result = {
+            "skipped": True,
+            "reason": writeback_context.get("sourceWriteMode") or "handled_elsewhere",
+            "tableId": source_table_id,
+            "count": len(rows["sourceRows"]),
+        }
+    else:
+        source_result = create_feishu_records(base, source_table_id, source_fields, rows["sourceRows"], lark_cli, dry_run)
     source_record_id = (source_session.get("meta") or {}).get("feishuRecordId")
     if writeback_context.get("markCollected") and rows["answerRows"] and source_record_id:
         source_update_result = update_feishu_task_rows(base, [source_record_id], lark_cli, dry_run)
@@ -534,20 +546,28 @@ def write_feishu_result(writeback_context: dict, source_session: dict, result: d
         source_update_result = {"skipped": True, "reason": "no-source-record-id-or-answer-row" if writeback_context.get("markCollected") else "mark-collected-disabled"}
     return {
         "finishedAt": now_iso(),
-        "answerTableId": FEISHU_ANSWER_TABLE_ID,
-        "sourceTableId": FEISHU_SOURCE_TABLE_ID,
+        "answerTableId": answer_table_id,
+        "sourceTableId": source_table_id,
         "inputTableId": base["tableId"],
         "sourceRecordId": source_record_id,
         "markCollected": bool(writeback_context.get("markCollected")),
+        "writebackAllowed": result.get("writebackAllowed", True),
+        "writebackGuard": result.get("writebackGuard"),
         "answerCount": len(rows["answerRows"]),
-        "sourceCount": len(rows["sourceRows"]),
+        "sourceCount": 0 if writeback_context.get("skipSourceWrite") else len(rows["sourceRows"]),
         "answerResult": answer_result,
         "sourceResult": source_result,
         "sourceUpdateResult": source_update_result,
     }
 
 
-def planned_writeback(task: dict, enabled: bool, mark_collected: bool = False) -> dict:
+def planned_writeback(
+    task: dict,
+    enabled: bool,
+    mark_collected: bool = False,
+    answer_table_id: str = "",
+    source_table_id: str = "",
+) -> dict:
     """Describe the Feishu writeback work that would be performed."""
     collect_account = clean_text(task.get("options", {}).get("collectAccount")) or DEFAULT_COLLECT_ACCOUNT
     record_ids = [
@@ -558,8 +578,8 @@ def planned_writeback(task: dict, enabled: bool, mark_collected: bool = False) -
     return {
         "enabled": bool(enabled),
         "action": "create Doubao answer/source records immediately after each successful or partial result",
-        "answerTableId": FEISHU_ANSWER_TABLE_ID,
-        "sourceTableId": FEISHU_SOURCE_TABLE_ID,
+        "answerTableId": clean_text(answer_table_id) or FEISHU_ANSWER_TABLE_ID,
+        "sourceTableId": clean_text(source_table_id) or FEISHU_SOURCE_TABLE_ID,
         "collectAccount": collect_account,
         "markCollected": bool(mark_collected),
         "markCollectedField": "是否本次采集",

@@ -61,9 +61,8 @@ python scripts\test_source_links_snake.py --serial <serial> --limit 0 --output-d
 
 ## Practical Debug Order
 
-1. Run `python tests_smoke.py`.
-2. Run `python runner.py --task <task> --dry-run`.
-3. If device/app state is unclear, run `probe_ui_layout.py`.
-4. If source URLs fail, run `test_source_links_snake.py --limit 3`.
-5. If expert answer capture fails, run `test_expert_mode_full_answer.py`.
-6. Patch constants/selectors in `mobile_auto_doubao/constants.py` or flow logic in `doubao_app.py`, `source_links.py`, `expert_answer.py`, or `answer_share.py`.
+1. Run `python runner.py --task <task> --dry-run`.
+2. If device/app state is unclear, run `probe_ui_layout.py`.
+3. If source URLs fail, run `test_source_links_snake.py --limit 3`.
+4. If expert answer capture fails, run `test_expert_mode_full_answer.py`.
+5. Patch constants/selectors in `mobile_auto_doubao/constants.py` or flow logic in `doubao_app.py`, `source_links.py`, `expert_answer.py`, or `answer_share.py`.
