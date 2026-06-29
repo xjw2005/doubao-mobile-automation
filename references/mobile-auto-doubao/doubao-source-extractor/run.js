@@ -110,6 +110,9 @@ async function main() {
     console.log(`      Route: ${sourcesData.sourceFormat || 'unknown'}`);
     console.log(`      Answer chars: ${String(sourcesData.answer || '').length}`);
     console.log(`      Thinking chars: ${String(sourcesData.thinkingContent || '').length}`);
+    if (Array.isArray(sourcesData.searchQueries) && sourcesData.searchQueries.length) {
+      console.log(`      Search keywords: ${sourcesData.searchQueries.join('、')}`);
+    }
     console.log(`      Extracted ${sourcesData.count || 0} sources`);
 
     if (args.output) {

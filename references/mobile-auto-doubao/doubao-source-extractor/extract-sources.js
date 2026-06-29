@@ -279,6 +279,7 @@ function extractFromMessage(message) {
   const rawSources = [];
   let searchEnabled = false;
   const searchSummaries = [];
+  const searchQueries = [];
 
   for (const block of blocks) {
     const thinkingTitle = extractThinkingTitle(block);
@@ -290,6 +291,12 @@ function extractFromMessage(message) {
     if (search) {
       searchEnabled = true;
       if (search.summary) searchSummaries.push(cleanText(search.summary));
+      // 豆包联网搜索的关键词：search_query_result_block.queries
+      const queries = Array.isArray(search.queries) ? search.queries : [];
+      for (const query of queries) {
+        const cleaned = cleanText(query);
+        if (cleaned) searchQueries.push(cleaned);
+      }
       rawSources.push(...extractSourcesFromSearchBlock(block));
     }
   }
@@ -324,12 +331,21 @@ function extractFromMessage(message) {
     thinkingContent = thinkingTitle;
   }
 
+  // 豆包特例：非深度思考模式下分享页没有 thinking_block / thinking_content，
+  // 但联网搜索的关键词（search_query_result_block.queries）正是用户需要的"思考内容"。
+  // 当没有真实思考内容时，用搜索关键词兜底，格式对齐飞书写回的「搜索关键词：A、B」约定。
+  const uniqueSearchQueries = [...new Set(searchQueries.filter(Boolean))];
+  if (!thinkingContent && uniqueSearchQueries.length) {
+    thinkingContent = `搜索关键词：${uniqueSearchQueries.join('、')}`;
+  }
+
   return {
     answer,
     thinkingContent,
     sources: dedupeSources(rawSources),
     searchEnabled,
     searchSummaries: [...new Set(searchSummaries.filter(Boolean))],
+    searchQueries: uniqueSearchQueries,
     blockCount: blocks.length,
     textBlockCount: textBlocks.length,
   };
@@ -386,6 +402,7 @@ function extractDoubaoSourcesViaSsrHtml(html, shareId = '') {
     thinkingContent: extracted.thinkingContent,
     searchEnabled: Boolean(extracted.searchEnabled || sources.length),
     searchSummaries: extracted.searchSummaries || [],
+    searchQueries: extracted.searchQueries || [],
     count: sources.length,
     sources,
     debug: {

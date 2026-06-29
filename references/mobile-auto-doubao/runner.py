@@ -327,6 +327,7 @@ def run_question(
                     "searchEnabled": bool(extracted.get("searchEnabled")),
                     "sourceFormat": extracted.get("sourceFormat"),
                     "searchSummaries": extracted.get("searchSummaries", []),
+                    "searchQueries": extracted.get("searchQueries", []),
                 }
             except Exception as exc:
                 source_extraction = {"status": "failed", "ok": False, "error": str(exc), "sourceCount": 0}
