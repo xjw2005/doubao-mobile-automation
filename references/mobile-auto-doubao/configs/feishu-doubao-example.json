@@ -1,10 +1,10 @@
 {
   "input": {
-    "baseUrl": "https://example.feishu.cn/base/<baseToken>?table=<questionTableId>&view=<viewId>"
+    "baseUrl": "https://yuoukuajing.feishu.cn/base/HdDPbhFghaDQgSsqLZhcIQxqnNf?table=tblmCFnvnoieKXB2"
   },
   "writeback": {
-    "answerTableId": "<answerTableId>",
-    "sourceTableId": "<sourceTableId>"
+    "answerTableId": "tblaV1deA4L9hzze",
+    "sourceTableId": "tblilAHPyc0PFVbU"
   },
   "collectAccount": "18870501682"
 }

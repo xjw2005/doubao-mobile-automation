@@ -9,12 +9,19 @@ from urllib.parse import parse_qs, urlparse
 from .time_utils import now_iso, stamp
 
 
-FEISHU_ANSWER_TABLE_ID = "tblht063DmBFxBiW"
-FEISHU_SOURCE_TABLE_ID = "tblsVl8TzU5OeTHV"
-DEFAULT_PLATFORM = "豆包"
+FEISHU_ANSWER_TABLE_ID = "tblaV1deA4L9hzze"
+FEISHU_SOURCE_TABLE_ID = "tblilAHPyc0PFVbU"
+DEFAULT_PLATFORM = "豆包移动端"
 DEFAULT_COLLECT_ACCOUNT = "18870501682"
-ANSWER_WRITEBACK_FIELDS = ["采集账号", "自然问句", "是否开启深度思考", "AI回答", "深度思考", "关联自然问句", "是否触发联网", "对话链接"]
-SOURCE_WRITEBACK_FIELDS = ["来源标题", "来源URL", "引用来源类型", "引用来源平台", "关联自然问句"]
+QUESTION_ID_FIELD = "问题ID"
+LEGACY_QUESTION_ID_FIELD = "关联自然问句"
+INPUT_QUESTION_ID_FIELDS = (QUESTION_ID_FIELD, LEGACY_QUESTION_ID_FIELD)
+QUESTION_TEXT_FIELDS = ("问题文本", "问题")
+THINKING_FIELD = "是否开启深度思考"
+COLLECT_NOW_FIELD = "是否本次采集"
+AI_PLATFORM_FIELD = "AI平台"
+ANSWER_WRITEBACK_FIELDS = ["采集账号", "问题文本", QUESTION_ID_FIELD, "是否开启深度思考", "AI回答", "深度思考", "是否触发联网", "对话链接", AI_PLATFORM_FIELD]
+SOURCE_WRITEBACK_FIELDS = ["来源标题", "来源URL", "引用来源类型", "引用来源平台", QUESTION_ID_FIELD]
 DOMAIN_PLATFORM_MAP = [
     ("bjnews.com.cn", "新京报"),
     ("39.net", "39健康网"),
@@ -66,6 +73,20 @@ def clean_text(value) -> str:
     return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]+", " ", str(value or "").replace("\u00a0", " "))).strip()
 
 
+def normalize_ai_platform(value) -> str:
+    """Map legacy platform labels to Feishu select options."""
+    text = clean_text(value)
+    aliases = {
+        "豆包": "豆包移动端",
+        "doubao": "豆包移动端",
+        "千问": "千问移动端",
+        "qianwen": "千问移动端",
+        "DeepSeek": "DeepSeek移动端",
+        "deepseek": "DeepSeek移动端",
+    }
+    return aliases.get(text, text or DEFAULT_PLATFORM)
+
+
 def resolve_command(command: str) -> list[str]:
     """Resolve a CLI name to an executable path that subprocess can run."""
     candidate = Path(command)
@@ -99,6 +120,16 @@ def resolve_command(command: str) -> list[str]:
 def is_yes(value) -> bool:
     """Interpret common yes-like values as booleans."""
     return value is True or value == "是" or (isinstance(value, list) and "是" in value)
+
+
+def first_row_value(row_map: dict, names: tuple[str, ...], default=None):
+    """Return the first non-empty value from a Feishu row map."""
+    for name in names:
+        if name in row_map:
+            value = row_map.get(name)
+            if value not in (None, ""):
+                return value
+    return default
 
 
 def parse_base_location(args) -> dict:
@@ -183,11 +214,9 @@ def list_feishu_records_page(base: dict, offset: int, limit: int, lark_cli: str 
     ]
     if base.get("viewId"):
         args.extend(["--view-id", base["viewId"]])
+    for field_name in [*QUESTION_TEXT_FIELDS, *INPUT_QUESTION_ID_FIELDS, THINKING_FIELD, COLLECT_NOW_FIELD]:
+        args.extend(["--field-id", field_name])
     args.extend([
-        "--field-id", "问题",
-        "--field-id", "关联自然问句",
-        "--field-id", "是否开启深度思考",
-        "--field-id", "是否本次采集",
         "--offset", str(offset),
         "--limit", str(limit),
         "--format", "json",
@@ -204,11 +233,14 @@ def list_feishu_records(base: dict, start_row: int, end_row: int, lark_cli: str 
     offset = start_row - 1
     rows: list = []
     record_ids: list[str] = []
+    fields: list[str] = []
 
     while remaining > 0:
         page = list_feishu_records_page(base, offset, min(remaining, 200), lark_cli)
         page_rows = page.get("data") or []
         page_record_ids = page.get("record_id_list") or []
+        if not fields:
+            fields = page.get("fields") or []
         if not page_rows:
             break
         rows.extend(page_rows)
@@ -219,7 +251,7 @@ def list_feishu_records(base: dict, start_row: int, end_row: int, lark_cli: str 
         if fetched < 200:
             break
 
-    return {"data": rows, "record_id_list": record_ids}
+    return {"data": rows, "record_id_list": record_ids, "fields": fields}
 
 
 def build_task_from_feishu(args) -> dict:
@@ -229,14 +261,24 @@ def build_task_from_feishu(args) -> dict:
     records = list_feishu_records(base, base_start, base_end, args.lark_cli)
     rows = records.get("data") or []
     record_ids = records.get("record_id_list") or []
+    fields = records.get("fields") or []
     sessions = []
     skipped = []
     needs_thinking = False
-    platform = args.platform or DEFAULT_PLATFORM
+    platform = normalize_ai_platform(args.platform or DEFAULT_PLATFORM)
 
     for index, row in enumerate(rows):
-        padded = [*row, None, None, None, None]
-        question, linked_natural_question, thinking, collect_now = padded[:4]
+        row_map = dict(zip(fields, row)) if fields else {}
+        if row_map:
+            question = first_row_value(row_map, QUESTION_TEXT_FIELDS)
+            linked_natural_question = first_row_value(row_map, INPUT_QUESTION_ID_FIELDS)
+            thinking = row_map.get(THINKING_FIELD)
+            collect_now = row_map.get(COLLECT_NOW_FIELD, "是")
+        else:
+            padded = [*row, None, None, None]
+            question, linked_natural_question, thinking, collect_now = padded[:4]
+            if collect_now is None:
+                collect_now = "是"
         record_id = record_ids[index] if index < len(record_ids) else None
         question_text = clean_text(question)
         should_collect = is_yes(collect_now)
@@ -498,7 +540,7 @@ def build_feishu_writeback_rows_for_result(source_session: dict, result: dict, c
     if not cleaned_answer:
         return {"answerRows": answer_rows, "sourceRows": source_rows}
     linked_natural_question = clean_text(meta.get("linkedNaturalQuestion"))
-    platform = clean_text(meta.get("platform")) or DEFAULT_PLATFORM
+    platform = normalize_ai_platform(meta.get("platform") or DEFAULT_PLATFORM)
     sources = unique_sources(result.get("sources", []))
     quick_search_keywords, keyword_list = extract_quick_search_keywords(result.get("answer", ""))
     thinking_text = clean_text(result.get("thinkingContent")) or quick_search_keywords
@@ -507,12 +549,13 @@ def build_feishu_writeback_rows_for_result(source_session: dict, result: dict, c
     answer_rows.append([
         clean_text(collect_account) or DEFAULT_COLLECT_ACCOUNT,
         natural_question,
+        linked_natural_question,
         "是" if meta.get("thinking") else "否",
         cleaned_answer,
         thinking_text,
-        linked_natural_question,
         "是" if sources else "否",
         clean_text(result.get("answerShareUrl")),
+        platform,
     ])
     for source in sources:
         source_rows.append([source["title"], source["url"], source["sourceType"], source["platform"], linked_natural_question])

@@ -238,18 +238,20 @@ python runner.py --feishu-config configs\feishu-doubao-example.json --base-start
 ```
 
 `--base-start` and `--base-end` are 1-based and inclusive.
-The runner reads that row range first, then only keeps rows whose `是否本次采集` value is `是`.
+The runner reads that row range first, then only keeps rows whose `是否本次采集` value is `是`; if the field is absent, every row is treated as selected.
 
 `--base-limit` is still accepted as a fallback when `--base-start` and `--base-end` are omitted, but the row-range flags are the current mode.
 
 Input fields expected by the project:
 
 ```text
-问题
-关联自然问句
+问题文本
+问题ID
 是否开启深度思考
-是否本次采集
+是否本次采集（optional; defaults to 是 when absent）
 ```
+
+For input rows, the runner reads question text from `问题文本`, with legacy `问题` as a fallback. It reads the identifier from `问题ID`, with legacy `关联自然问句` as a fallback.
 
 When field names stay the same and only table IDs change, prefer the JSON config mode.
 The config file can set the input question table and the two writeback table IDs:
@@ -270,7 +272,7 @@ The config file can set the input question table and the two writeback table IDs
 `input.baseUrl` may be replaced by `input.baseToken`, `input.tableId`, and optional `input.viewId`.
 `writeback.answerTableId` points to the `AI回答采集`-style answer table.
 `writeback.sourceTableId` points to the `引用源明细` / AI source table.
-The answer and source field lists are still fixed in code and expected to match the existing schema.
+The answer and source field lists are still fixed in code and expected to match the current schema, including `问题ID` on both writeback tables.
 
 If `lark-cli` is not on `PATH`, pass `--lark-cli <path>`.
 On Windows, use the actual `.cmd` or `.exe` path instead of the PowerShell shim name, because Python `subprocess` may not resolve the shim the same way the shell does.

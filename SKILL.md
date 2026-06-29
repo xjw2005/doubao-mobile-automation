@@ -65,8 +65,8 @@ Minimal config shape:
 }
 ```
 
-The input table still uses the existing fields `问题`, `关联自然问句`, `是否开启深度思考`, and `是否本次采集`.
-The answer and source writeback tables still use the existing field names; only the table IDs are swapped through the JSON file.
+The input table uses `问题文本`, `问题ID`, and `是否开启深度思考`; `是否本次采集` is optional and defaults to `是` when absent. The runner also tolerates legacy input fields `问题` and `关联自然问句` during migration.
+The answer and source writeback tables use `问题ID` for the question identifier field; only the table IDs are swapped through the JSON file.
 
 For Doubao share-page extraction, use `--extract-sources --link-only`.
 In this mode the runner captures the mobile answer share link, parses the Doubao share page through `doubao-source-extractor/`, fills answer/thinking/sources from the share-page snapshot, and lets the JS extractor write source rows.

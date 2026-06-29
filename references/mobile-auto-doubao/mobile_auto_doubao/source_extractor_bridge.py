@@ -86,11 +86,11 @@ def resolve_script_path(explicit: str = "") -> Path:
 
 
 def validate_params(share_url: str, natural_question: str) -> None:
-    """Validate the share URL and natural question before extraction."""
+    """Validate the share URL and question ID before extraction."""
     if not share_url or not share_url.strip():
         raise SourceExtractorError("share_url is required (mobile side must capture the answer share link first)")
     if not natural_question or not natural_question.strip():
-        raise SourceExtractorError("natural_question is required (linked natural question from Feishu)")
+        raise SourceExtractorError("natural_question is required (question ID from Feishu)")
     if not DOUBAO_SHARE_URL_RE.match(share_url.strip()):
         raise SourceExtractorError(
             f"share_url does not look like a Doubao share URL: {share_url[:80]!r}. "
@@ -280,7 +280,7 @@ def run_source_extractor(
     script_path = resolve_script_path(options.script_path)
     logger.info("Script: %s", script_path)
     logger.info("Share URL: %s", share_url)
-    logger.info("Natural question: %s", natural_question)
+    logger.info("Question ID: %s", natural_question)
     logger.info("Mode: %s", "extract-only" if extract_only else f"full (base={base_token} table={table_id})")
 
     attempts: list[dict] = []
